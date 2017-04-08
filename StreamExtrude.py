@@ -68,17 +68,22 @@ def SetupAxis(self, temp_loc_first, temp_loc_last):
 		return 'z'
 
 def draw_along_normal(self, context):
+	width = None
+	for region in bpy.context.area.regions:
+		if region.type == "TOOLS":
+			width = region.width
+			break
 	font_id = 0
-	blf.position(font_id, 220, 100, 0)
+	blf.position(font_id, width+120, 100, 0)
 	blf.size(font_id, 12, 72)
 	blf.draw(font_id, "Space  Bar - Destructive Extrude")
-	blf.position(font_id, 220, 115, 0)
+	blf.position(font_id, width+120, 115, 0)
 	blf.size(font_id, 12, 72)
 	blf.draw(font_id, "Middle Mouse Bottom - Extrude Global Direction Axis")
-	blf.position(font_id, 220, 130, 0)
+	blf.position(font_id, width+120, 130, 0)
 	blf.size(font_id, 12, 72)
 	blf.draw(font_id, "Right Mouse Bottom - Extrude Vertex Normal")
-	blf.position(font_id, 220, 145, 0)
+	blf.position(font_id, width+120, 145, 0)
 	blf.size(font_id, 12, 72)
 	blf.draw(font_id, "Left Mouse Bottom - Extrude Along Normal")
 
