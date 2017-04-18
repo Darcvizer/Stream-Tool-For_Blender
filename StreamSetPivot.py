@@ -10,11 +10,26 @@ bl_info = {
 "location": "View3D > Add > Mesh > Stream Quiс Set Pivot",
 "description": "___",
 "author": "Vladislav Kindushov",
-"version": (0,1),
+"version": (0,2),
 "blender": (2, 7, 8),
 "category": "Mesh",}
 
+def SaveSelectMode(self, context):
+	count = 0
+	for i in edit_mode:
+		if i:
+			return count
+		else:
+			count += 1
+			continue
 
+def SetSelectMode(self, context):
+	if edit_mode_selection == 0:
+		bpy.context.tool_settings.mesh_select_mode = (True, False, False)
+	elif edit_mode_selection == 1:
+		bpy.context.tool_settings.mesh_select_mode = (False, True, False)
+	elif edit_mode_selection == 2:
+		bpy.context.tool_settings.mesh_select_mode = (False, False, True)
 
 def GetUserSetings(self, context):
 	global pivot
@@ -25,43 +40,61 @@ def GetUserSetings(self, context):
 	global edit_mode
 	global cursor_loc
 	global user_snap_target
+	global edit_mode_selection
 
-	user_snap_target = context.scene.tool_settings.snap_target
-	pivot = context.space_data.pivot_point
-	orientation = context.space_data.transform_orientation
-	cursor_loc = context.scene.cursor_location
+	if context.space_data.pivot_point != 'CURSOR' and context.scene.tool_settings.snap_target != 'CENTER':
+		user_snap_target = context.scene.tool_settings.snap_target
+		pivot = context.space_data.pivot_point
+		orientation = context.space_data.transform_orientation
+		cursor_loc = context.scene.cursor_location
 
-	if context.mode == 'OBJECT':
-		active_obj_name = context.active_object.name
-		select_obj = context.selected_objects
-		print(select_obj)
+		if context.mode == 'OBJECT':
+			active_obj_name = context.active_object.name
+			select_obj = context.selected_objects
 
-	elif context.mode == 'EDIT_MESH':
-		edit_mode = bpy.context.tool_settings.mesh_select_mode
-		selected_vertices_one = [i.index for i in bmesh.from_edit_mesh(bpy.context.active_object.data).verts if
-									  i.select]
+		elif context.mode == 'EDIT_MESH':
+			edit_mode = bpy.context.tool_settings.mesh_select_mode
+			edit_mode_selection = SaveSelectMode(self, context)
+			if edit_mode_selection == 0:
+				selected_vertices_one = [i.index for i in bmesh.from_edit_mesh(bpy.context.active_object.data).verts if
+										 i.select]
+			elif edit_mode_selection == 1:
+				selected_vertices_one = [i.index for i in bmesh.from_edit_mesh(bpy.context.active_object.data).edges if
+										 i.select]
+			elif edit_mode_selection == 2:
+				selected_vertices_one = [i.index for i in bmesh.from_edit_mesh(bpy.context.active_object.data).faces if
+										 i.select]
+	else:
+		context.space_data.pivot_point = pivot
+		context.scene.tool_settings.snap_target = user_snap_target
+		try:
+			bpy.ops.transform.delete_orientation('INVOKE_DEFAULT')
+		except:
+			None
+		context.space_data.transform_orientation = orientation
+		GetUserSetings(self, context)
 
 def ObjReturnSel(self):
 	for i in select_obj:
 		i.select = True
 	bpy.context.scene.objects.active = bpy.data.objects[active_obj_name]
 
-def ReturnSelElement(self):
+def ReturnSelElement(self, context):
 	obj = bpy.context.edit_object
 	me = obj.data
 	bm = bmesh.from_edit_mesh(me)
 	for i in selected_vertices_one:
-		bm.verts[i].select = True
-	bpy.context.tool_settings.mesh_select_mode = edit_mode
-
+		if edit_mode_selection == 0:
+			bm.verts[i].select = True
+		elif edit_mode_selection == 1:
+			bm.edges[i].select = True
+		elif edit_mode_selection == 2:
+			bm.faces[i].select = True
+	SetSelectMode(self, context)
 
 
 def ReturnOrint(self):
 	context.space_data.transform_orientation = orientation
-
-
-
-
 
 def Rotation(self, context, vec):
 	obj = bpy.context.active_object
@@ -100,9 +133,8 @@ def CreateOrientation(self, context, event, vec):
 		except:
 			None
 		bpy.ops.mesh.select_all(action='DESELECT')
-		ReturnSelElement(self)
-
-
+		ReturnSelElement(self, context)
+		SetSelectMode(self, context)
 
 def RayCast(self, context, event, ray_max=1000.0):
 	"""Run this function on left mouse, execute the ray cast"""
@@ -147,6 +179,7 @@ def RayCast(self, context, event, ray_max=1000.0):
 		ray_direction_obj.normalize()
 
 		# cast the ray
+		obj.update_from_editmode()
 		bvh = BVHTree.FromObject(obj, context.scene)
 		location, normal, face_index, d = bvh.ray_cast(ray_origin_obj, ray_direction_obj)
 
@@ -164,6 +197,7 @@ def RayCast(self, context, event, ray_max=1000.0):
 
 	for obj, matrix in visible_objects_and_duplis():
 		if obj.type == 'MESH':
+
 			hit, normal, face_index = obj_ray_cast(obj, matrix)
 			if hit is not None:
 				hit_world = matrix * hit
@@ -220,19 +254,21 @@ class StreamSetPivot(bpy.types.Operator):
 
 	@classmethod
 	def pool(cls, context):
-		return (context.active_object == 'MESH') and (not context.active_object.hide) and context.active_object
+		return (context.active_object == 'MESH') and (not context.active_object.hide and context.active_object)
 
 #__________________________INVOKE____________________#
 
 	def invoke(self, context, event):
 		if context.space_data.type == 'VIEW_3D':
-			context.window_manager.modal_handler_add(self)
+			if context.active_object is None:
+				self.report({'WARNING'}, "Not select active object")
+				return {'CANCELLED'}
+
 			GetUserSetings(self, context)
 			context.space_data.pivot_point = 'CURSOR'
-			ob = context.object
-			self.BVH = BVHTree.FromObject(ob, context.scene)
 			context.scene.tool_settings.snap_target = 'CENTER'
 
+			context.window_manager.modal_handler_add(self)
 			return {'RUNNING_MODAL'}
 		else:
 			self.report({'WARNING'}, "Active space must be a View3d")
@@ -252,19 +288,17 @@ class StreamSetPivot(bpy.types.Operator):
 			bpy.ops.transform.delete_orientation('INVOKE_DEFAULT')
 
 			bpy.ops.stream.pivot_haunter('INVOKE_DEFAULT')
-
 			return {'FINISHED'}
 
 		elif event.type == 'MIDDLEMOUSE':
 			context.space_data.pivot_point = pivot
-			#bpy.ops.transform.delete_orientation('INVOKE_DEFAULT')
+			bpy.ops.transform.delete_orientation('INVOKE_DEFAULT')
 			return {'FINISHED'}
 
 		elif event.type == 'RIGHTMOUSE':
 			context.space_data.pivot_point = 'CURSOR'
 			context.scene.cursor_location = cursor_loc
 			bpy.ops.stream.pivot_haunter('INVOKE_DEFAULT')
-
 			return {'FINISHED'}
 
 		elif event.type in {'ESC'}:
@@ -277,13 +311,19 @@ class StreamPivotHaunter(bpy.types.Operator):
 	bl_idname = "stream.pivot_haunter"
 	bl_label = "Stream Pivot Haunter"
 
+
 	@classmethod
 	def pool(cls, context):
 		return context.space_data.type == "VIEW_3D"
 
 	def invoke(self, context, event):
 		if context.space_data.type == 'VIEW_3D':
-
+			self.object = False
+			self.mesh = False
+			if context.mode == 'OBJECT':
+				self.object = True
+			elif context.mode == 'EDIT_MESH':
+				self.mesh = True
 			context.window_manager.modal_handler_add(self)
 			return {'RUNNING_MODAL'}
 		else:
@@ -291,60 +331,85 @@ class StreamPivotHaunter(bpy.types.Operator):
 			return {'CANCELLED'}
 
 	def modal(self, context, event):
-		try:
-			if context.mode == 'OBJECT':
-				self.sel_buffer = context.selected_objects
-				if self.sel_buffer != select_obj:
-					if pivot == 'CURSOR':
-						context.space_data.pivot_point = 'MEDIAN_POINT'
-					else:
-						context.space_data.pivot_point = pivot
-					context.scene.tool_settings.snap_target = user_snap_target
-					context.scene.cursor_location = cursor_loc
-					try:
-						bpy.ops.transform.delete_orientation('INVOKE_DEFAULT')
-
-					except:
-						None
-					context.space_data.transform_orientation = orientation
-					return {'FINISHED'}
-				else:
-					return {'PASS_THROUGH'}
+		#print("haunter")
+		if self.object:
+			self.sel_buffer = context.selected_objects
+			if self.sel_buffer != select_obj:
+				context.space_data.pivot_point = pivot
+				try:
+					context.scene.tool_settings.snap_target = user_snap_targe
+				except:
+					context.scene.tool_settings.snap_target = 'CLOSEST'
+				context.scene.cursor_location = cursor_loc
+				try:
+					bpy.ops.transform.delete_orientation('INVOKE_DEFAULT')
+				except:
+					None
+				context.space_data.transform_orientation = orientation
+				return {'FINISHED'}
 			elif context.mode == 'EDIT_MESH':
-				self.selection_vertices_two = [i.index for i in bmesh.from_edit_mesh(bpy.context.active_object.data).verts if i.select]
+				context.space_data.pivot_point = pivot
+				try:
+					context.scene.tool_settings.snap_target = user_snap_targe
+				except:
+					context.scene.tool_settings.snap_target = 'CLOSEST'
+				try:
+					bpy.ops.transform.delete_orientation('INVOKE_DEFAULT')
+				except:
+					None
+				context.space_data.transform_orientation = orientation
+				return {'FINISHED'}
+
+			else:
+				return {'PASS_THROUGH'}
+
+		elif self.mesh:
+			try:
+				if edit_mode_selection == 0:
+					self.selection_vertices_two = [i.index for i in bmesh.from_edit_mesh(bpy.context.active_object.data).verts
+											 if
+											 i.select]
+				elif edit_mode_selection == 1:
+					self.selection_vertices_two = [i.index for i in bmesh.from_edit_mesh(bpy.context.active_object.data).edges
+											 if
+											 i.select]
+				elif edit_mode_selection == 2:
+					self.selection_vertices_two = [i.index for i in bmesh.from_edit_mesh(bpy.context.active_object.data).faces
+											 if
+											 i.select]
 				if selected_vertices_one != self.selection_vertices_two:
+					#SetSelectMode(self, context)
 					context.space_data.pivot_point = pivot
 					context.scene.tool_settings.snap_target = user_snap_target
 					try:
-						context.space_data.transform_orientation = orientation
-					except:
-						None
-					try:
 						bpy.ops.transform.delete_orientation('INVOKE_DEFAULT')
-
 					except:
 						None
-
+					context.space_data.transform_orientation = orientation
 					context.scene.cursor_location = cursor_loc
-
 					return {'FINISHED'}
-				else:
-					return {'PASS_THROUGH'}
-			else:
-				return {'PASS_THROUGH'}
-		except:
-			if pivot == 'CURSOR':
-				context.space_data.pivot_point = 'MEDIAN_POINT'
-			else:
-				context.space_data.pivot_point = pivot
-			try:
-				context.space_data.transform_orientation = orientation
 			except:
 				None
-			context.scene.cursor_location = cursor_loc
-			return {'FINISHED'}
+
+			if context.mode == 'OBJECT':
+				context.space_data.pivot_point = pivot
+				try:
+					context.scene.tool_settings.snap_target = user_snap_targe
+				except:
+					context.scene.tool_settings.snap_target = 'CLOSEST'
+				try:
+					bpy.ops.transform.delete_orientation('INVOKE_DEFAULT')
+				except:
+					None
+				context.space_data.transform_orientation = orientation
+				return {'FINISHED'}
+			else:
+				return {'PASS_THROUGH'}
+		else:
+			return {'PASS_THROUGH'}
 
 		return {'RUNNING_MODAL'}
+
 
 def register():
 	bpy.utils.register_class(StreamSetPivot)
