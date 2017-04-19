@@ -10,7 +10,7 @@ bl_info = {
 "location": "View3D > Add > Mesh > Stream Quiс Set Pivot",
 "description": "___",
 "author": "Vladislav Kindushov",
-"version": (0,2),
+"version": (0,3),
 "blender": (2, 7, 8),
 "category": "Mesh",}
 
@@ -136,6 +136,7 @@ def CreateOrientation(self, context, event, vec):
 		ReturnSelElement(self, context)
 		SetSelectMode(self, context)
 
+
 def RayCast(self, context, event, ray_max=1000.0):
 	"""Run this function on left mouse, execute the ray cast"""
 	# get the context arguments
@@ -179,9 +180,24 @@ def RayCast(self, context, event, ray_max=1000.0):
 		ray_direction_obj.normalize()
 
 		# cast the ray
-		obj.update_from_editmode()
-		bvh = BVHTree.FromObject(obj, context.scene)
-		location, normal, face_index, d = bvh.ray_cast(ray_origin_obj, ray_direction_obj)
+		if context.mode == 'OBJECT':
+			#print("object")
+
+			if obj.modifiers == 0:
+				bvh = BVHTree.FromObject(obj, context.scene)
+				location, normal, face_index, d = bvh.ray_cast(ray_origin_obj, ray_direction_obj)
+			else:
+				scene = bpy.context.scene
+				#obj = obj.to_mesh(scene, apply_modifiers=True, settings='PREVIEW')
+				bvh = BVHTree.FromObject(obj, context.scene)
+				location, normal, face_index, d = bvh.ray_cast(ray_origin_obj, ray_direction_obj)
+				#success, location, normal, face_index = obj.ray_cast(ray_origin_obj, ray_direction_obj)
+				#bpy.data.meshes.remove(obj)
+
+		elif context.mode == 'EDIT_MESH':
+			obj.update_from_editmode()
+			bvh = BVHTree.FromBMesh(bmesh.from_edit_mesh(obj.data))
+			location, normal, face_index, d = bvh.ray_cast(ray_origin_obj, ray_direction_obj)
 
 		if face_index != -1:
 			return location, normal, face_index
@@ -211,10 +227,13 @@ def RayCast(self, context, event, ray_max=1000.0):
 					best_hit = hit
 					break
 
-	if best_obj is not None:
+	def run(best_obj, best_matrix, best_face, best_hit):
 		best_distance = float("inf")  # use float("inf") (infinity) to have unlimited search range
-		mesh = best_obj.data
-		best_matrix = best_obj.matrix_world
+		if context.mode == 'EDIT_MESH':
+			mesh = best_obj.data
+		else:
+			mesh = best_obj
+		#best_matrix = best_obj.matrix_world
 		for vert_index in mesh.polygons[best_face].vertices:
 			vert_coord = mesh.vertices[vert_index].co
 			distance = (vert_coord - best_hit).magnitude
@@ -222,19 +241,17 @@ def RayCast(self, context, event, ray_max=1000.0):
 				best_distance = distance
 				CreateOrientation(self, context, event, vert_coord)
 				scene.cursor_location = best_matrix * vert_coord
-		mesh.update(calc_edges=True, calc_tessface=False)
+
 		for v0, v1 in mesh.polygons[best_face].edge_keys:
-			p0 = obj.data.vertices[v0].co
-			p1 = obj.data.vertices[v1].co
+			p0 = mesh.vertices[v0].co
+			p1 = mesh.vertices[v1].co
 			p = (p0 + p1) / 2
 			distance = (p - best_hit).magnitude
 			if distance < best_distance:
 				best_distance = distance
-				vec = p0-p1
+				vec = p0 - p1
 				CreateOrientation(self, context, event, vec)
 				scene.cursor_location = best_matrix * p
-
-
 
 		face_pos = Vector(mesh.polygons[best_face].center)
 		distance = (face_pos - best_hit).magnitude
@@ -243,6 +260,21 @@ def RayCast(self, context, event, ray_max=1000.0):
 			vec = mesh.polygons[best_face].normal.copy()
 			CreateOrientation(self, context, event, vec)
 			scene.cursor_location = best_matrix * face_pos
+
+	if best_obj is not None:
+		if best_obj.modifiers == 0:
+			run(best_obj.data, best_matrix, best_face, best_hit)
+		else:
+			if context.mode == 'OBJECT':
+				scene = bpy.context.scene
+				obj_data = best_obj.to_mesh(scene, apply_modifiers=True, settings='PREVIEW')
+				run(obj_data, best_matrix, best_face, best_hit)
+				bpy.data.meshes.remove(obj_data)
+			elif context.mode == 'EDIT_MESH':
+				run(best_obj, best_matrix, best_face, best_hit)
+
+
+
 
 
 
@@ -263,11 +295,15 @@ class StreamSetPivot(bpy.types.Operator):
 			if context.active_object is None:
 				self.report({'WARNING'}, "Not select active object")
 				return {'CANCELLED'}
+			#
+			# if context.space_data.pivot_point == 'CURSOR' and context.scene.tool_settings.snap_target == 'CENTER':
+			# 	self.report({'WARNING'}, "Change pivot point and snap target")
+			# 	return {'CANCELLED'}
+			# else:
 
 			GetUserSetings(self, context)
 			context.space_data.pivot_point = 'CURSOR'
 			context.scene.tool_settings.snap_target = 'CENTER'
-
 			context.window_manager.modal_handler_add(self)
 			return {'RUNNING_MODAL'}
 		else:
