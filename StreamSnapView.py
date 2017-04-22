@@ -118,7 +118,7 @@ class AddonPreferences(bpy.types.AddonPreferences):
 		wm = bpy.context.window_manager
 		#kc = wm.keyconfigs.user
 		km = kc.keymaps['3D View Generic']
-		kmi = get_hotkey_entry_item(km, 'view3d.stream_snap_view', 'view3d.stream_snap_view')
+		kmi = get_hotkey_entry_item(km, 'view3d.Snap View Ortho', 'view3d.stream_snap_view')
 		if kmi:
 			col.context_pointer_set("keymap", km)
 			rna_keymap_ui.draw_kmi([], kc, km, kmi, col, 0)
@@ -158,8 +158,8 @@ def add_hotkey():
 	wm = bpy.context.window_manager
 	kc = wm.keyconfigs.addon
 	km = kc.keymaps.new(name="3D View Generic", space_type='VIEW_3D', region_type='WINDOW')
-	kmi = km.keymap_items.new('view3d.stream_snap_view', 'LEFTMOUSE', 'PRESS', alt=True)
-	kmi.properties.name = "view3d.StreamViewSnap"
+	kmi = km.keymap_items.new('view3d.Snap View Ortho', 'LEFTMOUSE', 'PRESS', alt=True)
+	#kmi.properties.name = "view3d.StreamViewSnap"
 	kmi.active = True
 	addon_keymaps.append((km, kmi))
 
