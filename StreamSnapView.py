@@ -70,129 +70,30 @@ class StreamViewSnap(bpy.types.Operator):
 
 	def invoke(self, context, event):
 		if context.space_data.type == 'VIEW_3D':
-			self.lock = False
-			self.coord = None
 			context.window_manager.modal_handler_add(self)
+			bpy.ops.view3d.rotate('INVOKE_DEFAULT')
+			
 			return {'RUNNING_MODAL'}
 		else:
 			self.report({'WARNING'}, "Active space must be a View3d")
 			return {'CANCELLED'}
 
 	def modal(self, context, event):
-
-		if self.lock == False:
-			self.lock = True
-			#
-			bpy.ops.view3d.rotate('INVOKE_DEFAULT')
-			return {'RUNNING_MODAL'}
-		if event.shift:# and event.value == 'PRESS':
-			#if event.value == 'PRESS':
+		if event.value == 'RELEASE':
+			if event.shift:
 				vector = getView(self, context, event)
 				name, value = ExcludeAxis(self, context, vector)
 				findView2(self, context, name, value)
-				print("sisi")
+			
 				return {'FINISHED'}
-		if event.value == 'RELEASE':
-			return {'FINISHED'}
-
-
-
 
 		return {'PASS_THROUGH'}
 		return {'RUNNING_MODAL'}
 
 
-# # Preferences
-# class AddonPreferences(bpy.types.AddonPreferences):
-# 	bl_idname = __name__
-#
-# 	def draw(self, context):
-# 		layout = self.layout
-# 		wm = bpy.context.window_manager
-# 		box = layout.box()
-# 		split = box.split()
-# 		col = split.column()
-# 		col.label('Setup View Snap Hotkey')
-# 		col.separator()
-# 		kc = bpy.context.window_manager.keyconfigs.addon
-# 		wm = bpy.context.window_manager
-# 		#kc = wm.keyconfigs.user
-# 		km = kc.keymaps['3D View Generic']
-# 		kmi = get_hotkey_entry_item(km, 'view3d.Snap View Ortho', 'view3d.stream_snap_view')
-# 		if kmi:
-# 			col.context_pointer_set("keymap", km)
-# 			rna_keymap_ui.draw_kmi([], kc, km, kmi, col, 0)
-# 		else:
-# 			col.label("No hotkey entry found")
-# 			col.operator(Template_Add_Hotkey.bl_idname, text="Add hotkey entry", icon='ZOOMIN')
-#
-#
-# # -----------------------------------------------------------------------------
-# #    Keymap
-# # -----------------------------------------------------------------------------
-# addon_keymaps = []
-#
-#
-# def get_addon_preferences():
-# 	''' quick wrapper for referencing addon preferences '''
-# 	addon_preferences = bpy.context.user_preferences.addons[__name__].preferences
-# 	return addon_preferences
-#
-#
-# def get_hotkey_entry_item(km, kmi_name, kmi_value):
-# 	'''
-# 	returns hotkey of specific type, with specific properties.name (keymap is not a dict, so referencing by keys is not enough
-# 	if there are multiple hotkeys!)
-# 	'''
-# 	for i, km_item in enumerate(km.keymap_items):
-# 		if km.keymap_items.keys()[i] == kmi_name:
-# 			if km.keymap_items[i].properties.name == kmi_value:
-# 				return km_item
-# 	return None
-#
-#
-# def add_hotkey():
-# 	user_preferences = bpy.context.user_preferences
-# 	addon_prefs = user_preferences.addons[__name__].preferences
-#
-# 	wm = bpy.context.window_manager
-# 	kc = wm.keyconfigs.addon
-# 	km = kc.keymaps.new(name="3D View Generic", space_type='VIEW_3D', region_type='WINDOW')
-# 	kmi = km.keymap_items.new('view3d.Snap View Ortho', 'LEFTMOUSE', 'PRESS', alt=True)
-# 	#kmi.properties.name = "view3d.StreamViewSnap"
-# 	kmi.active = True
-# 	addon_keymaps.append((km, kmi))
-#
-#
-# class Template_Add_Hotkey(bpy.types.Operator):
-# 	''' Add hotkey entry '''
-# 	bl_idname = "template.add_hotkey"
-# 	bl_label = "Addon Preferences Example"
-# 	bl_options = {'REGISTER', 'INTERNAL'}
-#
-# 	def execute(self, context):
-# 		add_hotkey()
-#
-# 		self.report({'INFO'}, "Hotkey added in User Preferences -> Input -> Screen -> Screen (Global)")
-# 		return {'FINISHED'}
-#
-#
-# def remove_hotkey():
-# 	''' clears all addon level keymap hotkeys stored in addon_keymaps '''
-# 	wm = bpy.context.window_manager
-# 	kc = wm.keyconfigs.addon
-# 	km = kc.keymaps['3D View Generic']
-#
-# 	for km, kmi in addon_keymaps:
-# 		km.keymap_items.remove(kmi)
-# 		wm.keyconfigs.addon.keymaps.remove(km)
-# 	addon_keymaps.clear()
 
 def register():
 	bpy.utils.register_module(__name__)
-
-	# hotkey setup
-	#add_hotkey()
 
 	kc = bpy.context.window_manager.keyconfigs.addon
 	if kc:
