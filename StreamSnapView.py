@@ -1,23 +1,30 @@
 import bpy
+from bpy.types import Operator, Macro
 from bpy_extras import view3d_utils
 from mathutils import Vector
 import rna_keymap_ui
+from bpy.props import (
+	EnumProperty,
+)
 
 bl_info = {
-"name": "Stream Rotation Snap View",
-"location": "View3D > Add > Mesh > Stream Rotation Snap View",
-"description": "___",
-"author": "Vladislav Kindushov",
-"version": (0,1),
-"blender": (2, 7, 8),
-"category": "3D View"}
+	"name": "Stream Rotation Snap View",
+	"location": "View3D > view snap",
+	"description": "Snap View",
+	"author": "Vladislav Kindushov",
+	"version": (0, 3),
+	"blender": (2, 7, 3),
+	"category": "View3D",
+}
+PREFS = None
+
 
 def getView(self, context, event):
 	region = context.region
 	rv3d = context.region_data
 	coord = event.mouse_region_x, event.mouse_region_y
-	#view_vector = view3d_utils.region_2d_to_vector_3d(region, rv3d, coord)
 	return rv3d.view_rotation * Vector((0.0, 0.0, -1.0))
+
 
 def findView(self, context, event):
 	vector = getView(self, context, event)
@@ -34,17 +41,19 @@ def findView(self, context, event):
 	elif vector == Vector((0.0, 0.0, -1.0)):
 		bpy.ops.view3d.viewnumpad(type='BOTTOM', align_active=False)
 
+
 def ExcludeAxis(self, context, vector):
 	x = vector[0]
 	y = vector[1]
 	z = vector[2]
-
+	
 	if abs(x) > abs(y) and abs(x) > abs(z):
 		return 'x', x
 	elif abs(y) > abs(x) and abs(y) > abs(z):
 		return 'y', y
 	elif abs(z) > abs(x) and abs(z) > abs(y):
 		return 'z', z
+
 
 def findView2(self, context, axis, ax):
 	if axis == 'x':
@@ -64,60 +73,102 @@ def findView2(self, context, axis, ax):
 			bpy.ops.view3d.viewnumpad(type='BOTTOM', align_active=False)
 
 
-class StreamViewSnap(bpy.types.Operator):
-	bl_idname = "view3d.stream_snap_view"
-	bl_label = "Snap View Ortho"
-
+class q(bpy.types.Operator):
+	"""Border Occlusion selection """
+	bl_idname = "view3d.q"
+	bl_label = "q"
+	
 	def invoke(self, context, event):
-		if context.space_data.type == 'VIEW_3D':
-			context.window_manager.modal_handler_add(self)
-			bpy.ops.view3d.rotate('INVOKE_DEFAULT')
-			
-			return {'RUNNING_MODAL'}
-		else:
-			self.report({'WARNING'}, "Active space must be a View3d")
-			return {'CANCELLED'}
-
-	def modal(self, context, event):
-		if event.value == 'RELEASE':
+		
+		if PREFS.Mode == 'blender':
+			if event.ctrl:
+				vector = getView(self, context, event)
+				name, value = ExcludeAxis(self, context, vector)
+				findView2(self, context, name, value)
+		elif PREFS.Mode == 'maya':
 			if event.shift:
 				vector = getView(self, context, event)
 				name, value = ExcludeAxis(self, context, vector)
 				findView2(self, context, name, value)
-			
-				return {'FINISHED'}
+		elif PREFS.Mode == '3ds max':
+			if event.shift:
+				vector = getView(self, context, event)
+				name, value = ExcludeAxis(self, context, vector)
+				findView2(self, context, name, value)
+		
+		# if event.shift:
+		
+		return {'FINISHED'}
 
-		return {'PASS_THROUGH'}
-		return {'RUNNING_MODAL'}
 
+class z(bpy.types.Operator):
+	bl_idname = "view3d.z"
+	bl_label = "z"
+	
+	def invoke(self, context, event):
+		if event.shift:
+			ViewMacro.define('VIEW3D_OT_q')
+		return {'FINISHED'}
+
+
+class ViewMacro(Macro):
+	bl_idname = 'view3d.view_snap'
+	bl_label = 'view_snap'
+	bl_options = {'REGISTER', 'UNDO'}
+	
+	def execute(self, context):
+		ViewMacro.define('VIEW3D_OT_rotate')
+		return {'FINISHED'}
+
+
+def use_cashes(self, context):
+	self.caches_valid = True
+
+
+class AddonPreferences(bpy.types.AddonPreferences):
+	bl_idname = __name__
+	
+	Mode = EnumProperty(
+		items=[('blender', "Blender", "Press ctrl after middle mouse button "),
+		       ('maya', "Maya", "Press shift after left mouse button "),
+		       ('3ds max', "3DS Max", "Press shift after middle mouse button")],
+		name="Rotate mode",
+		default='blender',
+		update=use_cashes
+	)
+	caches_valid = True
+	
+	def draw(self, context):
+		layout = self.layout
+		layout.prop(self, "Mode")
 
 
 def register():
 	bpy.utils.register_module(__name__)
-
+	
+	ViewMacro.define('VIEW3D_OT_rotate')
+	ViewMacro.define('VIEW3D_OT_z')
+	
+	global PREFS
+	PREFS = bpy.context.user_preferences.addons[__name__].preferences
+	
 	kc = bpy.context.window_manager.keyconfigs.addon
 	if kc:
 		km = kc.keymaps["3D View"]
 		for kmi in km.keymap_items:
 			if kmi.idname == 'view3d.rotate':
-				km.keymap_items.remove(kmi)
-		km = kc.keymaps.new(name="3D View", space_type="VIEW_3D")
-		kmi = km.keymap_items.new('view3d.stream_snap_view', 'LEFTMOUSE', 'PRESS', alt=True)
-
+				kmi.idname = 'view3d.view_snap'
+				break
 
 
 def unregister():
 	bpy.utils.unregister_module(__name__)
-
-	# hotkey cleanup
-	#remove_hotkey()
-
 	kc = bpy.context.window_manager.keyconfigs.addon
 	if kc:
 		km = kc.keymaps["3D View"]
 		for kmi in km.keymap_items:
-			if kmi.idname == 'view3d.stream_snap_view':
-				km.keymap_items.remove(kmi)
+			if kmi.idname == 'view3d.view_snap':
+				kmi.idname = 'view3d.rotate'
 
 
 if __name__ == "__main__":
