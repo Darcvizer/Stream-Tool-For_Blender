@@ -4,11 +4,11 @@ from bpy_extras import view3d_utils
 from mathutils import Vector
 import rna_keymap_ui
 from bpy.props import (
-	EnumProperty,
-)
+		EnumProperty,
+		)
 
 bl_info = {
-	"name": "Stream Rotation Snap View",
+	"name": "view snap",
 	"location": "View3D > view snap",
 	"description": "Snap View",
 	"author": "Vladislav Kindushov",
@@ -17,7 +17,6 @@ bl_info = {
 	"category": "View3D",
 }
 PREFS = None
-
 
 def getView(self, context, event):
 	region = context.region
@@ -46,7 +45,7 @@ def ExcludeAxis(self, context, vector):
 	x = vector[0]
 	y = vector[1]
 	z = vector[2]
-	
+
 	if abs(x) > abs(y) and abs(x) > abs(z):
 		return 'x', x
 	elif abs(y) > abs(x) and abs(y) > abs(z):
@@ -72,12 +71,11 @@ def findView2(self, context, axis, ax):
 		else:
 			bpy.ops.view3d.viewnumpad(type='BOTTOM', align_active=False)
 
-
 class q(bpy.types.Operator):
 	"""Border Occlusion selection """
 	bl_idname = "view3d.q"
 	bl_label = "q"
-	
+
 	def invoke(self, context, event):
 		
 		if PREFS.Mode == 'blender':
@@ -96,11 +94,9 @@ class q(bpy.types.Operator):
 				name, value = ExcludeAxis(self, context, vector)
 				findView2(self, context, name, value)
 		
-		# if event.shift:
-		
+		#if event.shift:
+
 		return {'FINISHED'}
-
-
 class z(bpy.types.Operator):
 	bl_idname = "view3d.z"
 	bl_label = "z"
@@ -109,7 +105,8 @@ class z(bpy.types.Operator):
 		if event.shift:
 			ViewMacro.define('VIEW3D_OT_q')
 		return {'FINISHED'}
-
+		
+	
 
 class ViewMacro(Macro):
 	bl_idname = 'view3d.view_snap'
@@ -120,39 +117,42 @@ class ViewMacro(Macro):
 		ViewMacro.define('VIEW3D_OT_rotate')
 		return {'FINISHED'}
 
-
+	
+	
+	
 def use_cashes(self, context):
 	self.caches_valid = True
 
-
 class AddonPreferences(bpy.types.AddonPreferences):
 	bl_idname = __name__
-	
+
 	Mode = EnumProperty(
 		items=[('blender', "Blender", "Press ctrl after middle mouse button "),
-		       ('maya', "Maya", "Press shift after left mouse button "),
-		       ('3ds max', "3DS Max", "Press shift after middle mouse button")],
+			   ('maya', "Maya", "Press shift after left mouse button "),
+			   ('3ds max', "3DS Max", "Press shift after middle mouse button")],
 		name="Rotate mode",
 		default='blender',
 		update=use_cashes
 	)
 	caches_valid = True
-	
 	def draw(self, context):
 		layout = self.layout
 		layout.prop(self, "Mode")
 
 
+
 def register():
+	
 	bpy.utils.register_module(__name__)
 	
 	ViewMacro.define('VIEW3D_OT_rotate')
 	ViewMacro.define('VIEW3D_OT_z')
+
 	
 	global PREFS
 	PREFS = bpy.context.user_preferences.addons[__name__].preferences
-	
-	kc = bpy.context.window_manager.keyconfigs.addon
+
+	kc = bpy.context.window_manager.keyconfigs.active
 	if kc:
 		km = kc.keymaps["3D View"]
 		for kmi in km.keymap_items:
@@ -161,9 +161,10 @@ def register():
 				break
 
 
+
 def unregister():
 	bpy.utils.unregister_module(__name__)
-	kc = bpy.context.window_manager.keyconfigs.addon
+	kc = bpy.context.window_manager.keyconfigs.active
 	if kc:
 		km = kc.keymaps["3D View"]
 		for kmi in km.keymap_items:
